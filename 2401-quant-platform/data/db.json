@@ -1,0 +1,78 @@
+{
+  "users": [
+    {
+      "id": "u-admin",
+      "username": "admin",
+      "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+      "name": "班主任",
+      "role": "headTeacher",
+      "createdAt": "2026-10-04T04:16:01.749Z",
+      "isSuper": true
+    }
+  ],
+  "sessions": [
+    {
+      "token": "tkmutk3i17mhno4",
+      "userId": "u-admin"
+    },
+    {
+      "token": "tkmutk5ksdop9tp",
+      "userId": "u-admin"
+    },
+    {
+      "token": "tkmutkfbk8688m5",
+      "userId": "u-admin"
+    },
+    {
+      "token": "tkmutkhrimpm6ka",
+      "userId": "u-admin"
+    },
+    {
+      "token": "tkmutkiwu260z66",
+      "userId": "u-admin"
+    },
+    {
+      "token": "tkmuty57r9s1bcn",
+      "userId": "u-admin"
+    }
+  ],
+  "students": [],
+  "groups": [
+    {
+      "id": 1,
+      "name": "第一导师小组",
+      "teacherId": ""
+    },
+    {
+      "id": 2,
+      "name": "第二导师小组",
+      "teacherId": ""
+    },
+    {
+      "id": 3,
+      "name": "第三导师小组",
+      "teacherId": ""
+    },
+    {
+      "id": 4,
+      "name": "第四导师小组",
+      "teacherId": ""
+    },
+    {
+      "id": 5,
+      "name": "第五导师小组",
+      "teacherId": ""
+    },
+    {
+      "id": 6,
+      "name": "第六导师小组",
+      "teacherId": ""
+    }
+  ],
+  "scores": [],
+  "shopItems": [],
+  "redeems": [],
+  "meta": {
+    "createdAt": "2026-10-04T04:16:01.749Z"
+  }
+}
