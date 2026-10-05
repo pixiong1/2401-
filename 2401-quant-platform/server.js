@@ -235,7 +235,10 @@ function readBody(req) {
 function getToken(req) {
   const h = req.headers["authorization"] || "";
   if (h.startsWith("Bearer ")) return h.slice(7);
-  return "";
+  // 从 Cookie 读取（支持"自动登录"：浏览器自动携带持久 cookie）
+  const cookie = req.headers["cookie"] || "";
+  const m = cookie.match(/(?:^|;)\s*qms_token=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : "";
 }
 
 function authUser(req) {
@@ -267,6 +270,8 @@ function handleAPI(req, res, url, method) {
       const token = uid("tk");
       db.sessions.push({ token, userId: user.id });
       saveDB();
+      // 持久 cookie：实现自动登录（90 天有效，HttpOnly 安全）
+      res.setHeader("Set-Cookie", `qms_token=${token}; Path=/; Max-Age=7776000; HttpOnly; SameSite=Lax`);
       return send(res, 200, { ok: true, msg: "登录成功", token, user: publicUser(user) });
     });
   }
@@ -275,6 +280,7 @@ function handleAPI(req, res, url, method) {
     const token = getToken(req);
     db.sessions = db.sessions.filter(s => s.token !== token);
     saveDB();
+    res.setHeader("Set-Cookie", "qms_token=; Path=/; Max-Age=0");
     return send(res, 200, { ok: true });
   }
 
@@ -371,6 +377,26 @@ function handleAPI(req, res, url, method) {
     const todayPrefix = todayStr + " ";
     const todayCount = db.scores.filter(r => r.createTime.startsWith(todayPrefix)).length;
     const pending = db.scores.filter(r => r.status === "pending").length;
+    // 小组带排名信息
+    const groupWithRank = (g) => {
+      const members = db.students.filter(s => s.groupId === g.id);
+      const total = members.reduce((a, s) => a + s.totalScore, 0);
+      const ranks = db.groups.map(x => ({
+        id: x.id,
+        total: db.students.filter(s => s.groupId === x.id).reduce((a, s) => a + s.totalScore, 0)
+      })).sort((a, b) => b.total - a.total);
+      const gr = ranks.findIndex(x => x.id === g.id);
+      return { id: g.id, name: g.name, memberCount: members.length, totalScore: total, groupRank: gr >= 0 ? gr + 1 : 0 };
+    };
+    // 评分记录视图（附学生名与组名）
+    const scoreView = (r) => {
+      const stu = getStudent(r.stuId);
+      return {
+        id: r.id, stuId: r.stuId, stuName: stu ? stu.name : r.stuId,
+        groupName: stu ? ((getGroup(stu.groupId) || {}).name || "") : "",
+        score: r.score, reason: r.reason, opName: r.opName, status: r.status, createTime: r.createTime
+      };
+    };
     const data = {
       studentCount: db.students.length,
       teacherCount: db.users.filter(u => (u.role === "teacher" || u.role === "headTeacher") && !u.isSuper).length,
@@ -382,25 +408,36 @@ function handleAPI(req, res, url, method) {
       topStudents: [...db.students].sort((a, b) => b.totalScore - a.totalScore).slice(0, 5).map(s => ({
         name: s.name, totalScore: s.totalScore, leaderRole: s.leaderRole
       })),
-      recentScores: db.scores.slice(-8).reverse().map(r => {
-        const stu = getStudent(r.stuId);
-        return { id: r.id, stuName: stu ? stu.name : r.stuId, score: r.score, reason: r.reason, opName: r.opName, status: r.status, createTime: r.createTime };
-      })
+      recentScores: db.scores.slice(-8).reverse().map(scoreView)
     };
-    // 角色过滤
+    // 角色过滤：学生 - 我的积分/排名/小组/个人记录/同组记录/其他记录
     if (user.role === "student") {
       const stu = getStudent(user.username);
-      data.myScore = stu ? stu.totalScore : 0;
-      data.myRank = stu ? db.students.filter(s => s.totalScore > stu.totalScore).length + 1 : 0;
-      data.myGroup = stu ? getGroup(stu.groupId) : null;
+      if (stu) {
+        const myGroupRaw = getGroup(stu.groupId);
+        const myGroup = myGroupRaw ? groupWithRank(myGroupRaw) : null;
+        const groupIds = new Set(db.students.filter(s => s.groupId === stu.groupId).map(s => s.stuId));
+        const all = [...db.scores].slice(-300).reverse();
+        data.myScore = stu.totalScore;
+        data.myRank = db.students.filter(s => s.totalScore > stu.totalScore).length + 1;
+        data.myGroup = myGroup;
+        data.myScores = all.filter(r => r.stuId === stu.stuId).map(scoreView);
+        data.groupScores = all.filter(r => groupIds.has(r.stuId)).map(scoreView);
+        data.otherScores = all.filter(r => !groupIds.has(r.stuId)).map(scoreView);
+      } else {
+        data.myScore = 0; data.myRank = 0; data.myGroup = null;
+        data.myScores = []; data.groupScores = []; data.otherScores = [];
+      }
     }
+    // 角色过滤：老师/班主任 - 我的小组排名/本组记录/其他记录
     if (user.role === "teacher" || user.role === "headTeacher") {
-      const myGroup = db.groups.find(g => g.teacherId === user.id);
-      data.myGroup = myGroup ? {
-        ...myGroup,
-        memberCount: db.students.filter(s => s.groupId === myGroup.id).length,
-        totalScore: db.students.filter(s => s.groupId === myGroup.id).reduce((a, s) => a + s.totalScore, 0)
-      } : null;
+      const myGroupRaw = db.groups.find(g => g.teacherId === user.id);
+      const myGroup = myGroupRaw ? groupWithRank(myGroupRaw) : null;
+      const groupIds = myGroupRaw ? new Set(db.students.filter(s => s.groupId === myGroupRaw.id).map(s => s.stuId)) : new Set();
+      const all = [...db.scores].slice(-300).reverse();
+      data.myGroup = myGroup;
+      data.groupScores = groupIds.size ? all.filter(r => groupIds.has(r.stuId)).map(scoreView) : [];
+      data.otherScores = groupIds.size ? all.filter(r => !groupIds.has(r.stuId)).map(scoreView) : all.map(scoreView);
     }
     return send(res, 200, { ok: true, data });
   }
