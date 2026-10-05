@@ -15,7 +15,8 @@ const App = {
       const action = el.getAttribute("data-action");
       const fn = this.actions[action];
       if (fn) {
-        e.preventDefault();
+        // 只阻止链接与普通按钮的默认行为；放行 submit 按钮，避免拦截表单提交
+        if (el.tagName === "A" || (el.tagName === "BUTTON" && el.type !== "submit")) e.preventDefault();
         fn(el, e);
       }
     });
@@ -24,20 +25,21 @@ const App = {
       if (form) { e.preventDefault(); handleAuthSubmit(form); }
     });
 
-    // 登录态恢复
-    if (API.token) {
-      try {
-        const r = await API.get("/api/me");
+    // 登录态恢复：localStorage token 优先，其次靠持久 cookie 自动登录
+    try {
+      const r = await API.get("/api/me");
+      if (r.user) {
+        if (API.token) localStorage.setItem("qms_token", API.token);
         S.user = r.user;
         if (r.student) S.student = r.student;
         if (r.group) S.myGroup = r.group;
         loadPendingCount();
-        route();
+        App.route();
         return;
-      } catch (e) {
-        API.token = "";
-        localStorage.removeItem("qms_token");
       }
+    } catch (e) {
+      API.token = "";
+      localStorage.removeItem("qms_token");
     }
     S.page = "login";
     render();
@@ -153,6 +155,7 @@ App.reg("logout", async () => {
   try { await API.post("/api/logout"); } catch (e) { /* ignore */ }
   API.token = "";
   localStorage.removeItem("qms_token");
+  document.cookie = "qms_token=; Path=/; Max-Age=0; SameSite=Lax";
   S.user = null;
   S.page = "login";
   location.hash = "#/login";
@@ -168,6 +171,7 @@ App.reg("toggle-auth", (el) => {
 App.reg("change-password", () => {
   openModal(modalFrame("🔒 修改密码", `
     <form id="pwdForm">
+      <div id="pwdErr" style="display:none;color:#e5484d;background:#fdecec;border:1px solid #f5c6c6;padding:8px 10px;border-radius:6px;margin-bottom:12px;font-size:13px"></div>
       <div class="form-item"><label>当前密码</label><input class="input" type="password" name="oldPassword" placeholder="输入当前密码" required></div>
       <div class="form-item"><label>新密码（至少 6 位）</label><input class="input" type="password" name="newPassword" placeholder="输入新密码" required></div>
       <div class="form-item"><label>确认新密码</label><input class="input" type="password" name="confirm" placeholder="再次输入新密码" required></div>
@@ -176,17 +180,20 @@ App.reg("change-password", () => {
   document.getElementById("pwdForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = e.target;
+    const errEl = document.getElementById("pwdErr");
+    errEl.style.display = "none";
     const oldPassword = f.oldPassword.value, newPassword = f.newPassword.value, confirm = f.confirm.value;
-    if (newPassword !== confirm) return toast("两次输入的新密码不一致", "error");
-    if (newPassword.length < 6) return toast("新密码至少 6 位", "error");
+    const showErr = (m) => { errEl.textContent = m; errEl.style.display = "block"; };
+    if (newPassword !== confirm) return showErr("两次输入的新密码不一致");
+    if (newPassword.length < 6) return showErr("新密码至少 6 位");
     const btn = f.querySelector("button[type=submit]");
-    btn.disabled = true;
+    btn.disabled = true; btn.textContent = "提交中...";
     try {
       const r = await API.post("/api/change-password", { oldPassword, newPassword });
-      toast(r.msg, "success");
+      toast(r.msg, "success", 4000);
       closeModal();
-    } catch (err) { toast(err.message, "error"); }
-    finally { btn.disabled = false; }
+    } catch (err) { showErr(err.message); toast(err.message, "error", 4000); }
+    finally { btn.disabled = false; btn.textContent = "确认修改"; }
   });
 });
 
