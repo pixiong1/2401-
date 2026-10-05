@@ -114,79 +114,106 @@ function renderLayout(content) {
   </div>`;
 }
 
-/* ===================== 概览 ===================== */
+/* ===================== 概览（按角色差异化主页） ===================== */
+
+function _scoreRow(r) {
+  return `<tr>
+    <td>${U.escapeHtml(r.stuName)}</td>
+    <td><span class="badge badge-gray">${U.escapeHtml(r.groupName || "-")}</span></td>
+    <td class="num ${U.scoreClass(r.score)}">${U.scoreText(r.score)}</td>
+    <td>${U.escapeHtml(r.reason)}</td>
+    <td>${U.escapeHtml(r.opName)}</td>
+    <td>${U.statusBadge(r.status)}</td>
+    <td>${U.escapeHtml(r.createTime)}</td>
+  </tr>`;
+}
+function _scoreTable(title, items, empty) {
+  const rows = items.length ? items.slice(0, 20).map(_scoreRow).join("") : `<tr><td colspan="7" class="empty">${empty || "暂无记录"}</td></tr>`;
+  return `<div class="card"><div class="card-title">${title}</div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>学生</th><th>小组</th><th>分数</th><th>事由</th><th>操作人</th><th>状态</th><th>时间</th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div>`;
+}
 
 async function renderDashboard() {
   const r = await API.get("/api/dashboard");
   const d = r.data;
   const u = S.user;
 
-  const heroBtn = u.role === "student"
-    ? `<button class="btn" data-action="nav" data-page="shop">去积分商城</button>`
-    : u.role === "headTeacher"
-      ? `<button class="btn" data-action="nav" data-page="students">管理学生</button>`
-      : `<button class="btn" data-action="nav" data-page="scores">录入评分</button>`;
-
-  let helloSub = "";
-  if (u.role === "student") {
-    helloSub = `当前积分 <b style="font-size:20px">${d.myScore}</b> 分，班级排名 <b style="font-size:20px">第 ${d.myRank} 名</b>`;
-  } else if (u.role === "teacher") {
-    helloSub = d.myGroup ? `你负责 ${d.myGroup.name}，共 ${d.myGroup.memberCount} 名学生` : "你还没有分配导师小组";
-  } else {
-    helloSub = `共 ${d.studentCount} 名学生、${d.teacherCount} 位老师、${d.groupCount} 个小组`;
-  }
-
-  const cards = `
-    <div class="grid grid-4" style="margin-bottom:16px">
-      <div class="stat-card"><div class="stat-icon blue">👥</div><div class="stat-info"><div class="stat-label">学生总数</div><div class="stat-value">${d.studentCount}</div></div></div>
-      <div class="stat-card"><div class="stat-icon green">👨‍🏫</div><div class="stat-info"><div class="stat-label">老师人数</div><div class="stat-value">${d.teacherCount}</div></div></div>
-      <div class="stat-card"><div class="stat-icon orange">📝</div><div class="stat-info"><div class="stat-label">评分记录</div><div class="stat-value">${d.scoreCount}</div></div></div>
-      <div class="stat-card"><div class="stat-icon red">⏳</div><div class="stat-info"><div class="stat-label">待审核</div><div class="stat-value">${d.pendingCount}</div></div></div>
-    </div>`;
-
-  // 排行 Top5
-  const topHtml = d.topStudents.map((s, i) => `
-    <tr>
+  // ---------- 超级管理员：上帝视角管理概览 ----------
+  if (u.isSuper) {
+    const topHtml = d.topStudents.map((s, i) => `<tr>
       <td><span class="badge ${i === 0 ? "badge-red" : i === 1 ? "badge-orange" : "badge-blue"}">#${i + 1}</span></td>
       <td>${U.escapeHtml(s.name)}${s.leaderRole ? ` <span class="badge badge-orange">${U.escapeHtml(s.leaderRole)}</span>` : ""}</td>
-      <td class="num score-plus">${s.totalScore}</td>
-    </tr>`).join("");
-
-  // 最新流水
-  const recents = d.recentScores.map(r => `
-    <li>
+      <td class="num score-plus">${s.totalScore}</td></tr>`).join("");
+    const recents = d.recentScores.map(r => `<li>
       <div class="tl-icon" style="background:${r.score >= 0 ? "var(--success-light)" : "var(--danger-light)"}">${r.score >= 0 ? "＋" : "－"}</div>
-      <div class="tl-body">
-        <div class="tl-line1">
-          <span class="tl-reason">${U.escapeHtml(r.stuName)} · ${U.escapeHtml(r.reason)}</span>
-          <span class="${U.scoreClass(r.score)}">${U.scoreText(r.score)}</span>
-        </div>
-        <div class="tl-meta">${U.escapeHtml(r.opName)} · ${U.escapeHtml(r.createTime)} ${U.statusBadge(r.status)}</div>
+      <div class="tl-body"><div class="tl-line1"><span class="tl-reason">${U.escapeHtml(r.stuName)} · ${U.escapeHtml(r.reason)}</span><span class="${U.scoreClass(r.score)}">${U.scoreText(r.score)}</span></div>
+      <div class="tl-meta">${U.escapeHtml(r.opName)} · ${U.escapeHtml(r.createTime)} ${U.statusBadge(r.status)}</div></div></li>`).join("");
+    return renderLayout(`
+      <div class="hello-banner">
+        <div><h2>你好，${U.escapeHtml(u.name)}</h2><p>系统管理 · 上帝视角 · 共 ${d.studentCount} 名学生、${d.teacherCount} 位老师、${d.groupCount} 个小组</p></div>
+        <button class="btn" data-action="nav" data-page="students">管理学生</button>
       </div>
-    </li>`).join("");
+      <div class="grid grid-4" style="margin-bottom:16px">
+        <div class="stat-card"><div class="stat-icon blue">👥</div><div class="stat-info"><div class="stat-label">学生总数</div><div class="stat-value">${d.studentCount}</div></div></div>
+        <div class="stat-card"><div class="stat-icon green">👨‍🏫</div><div class="stat-info"><div class="stat-label">老师人数</div><div class="stat-value">${d.teacherCount}</div></div></div>
+        <div class="stat-card"><div class="stat-icon orange">📝</div><div class="stat-info"><div class="stat-label">评分记录</div><div class="stat-value">${d.scoreCount}</div></div></div>
+        <div class="stat-card"><div class="stat-icon red">⏳</div><div class="stat-info"><div class="stat-label">待审核</div><div class="stat-value">${d.pendingCount}</div></div></div>
+      </div>
+      <div class="grid grid-2">
+        <div class="card"><div class="card-title">🏆 积分榜前五 <button class="btn btn-sm btn-ghost" data-action="nav" data-page="rank">查看完整排行</button></div>
+          <div class="table-wrap"><table class="table"><thead><tr><th>排名</th><th>姓名</th><th>总分</th></tr></thead><tbody>${topHtml || '<tr><td colspan="3" class="empty">暂无数据</td></tr>'}</tbody></table></div></div>
+        <div class="card"><div class="card-title">📋 最新评分记录 <button class="btn btn-sm btn-ghost" data-action="nav" data-page="scorelog">查看全部</button></div>
+          <ul class="timeline">${recents || '<li class="empty">暂无评分记录</li>'}</ul></div>
+      </div>`);
+  }
 
+  // ---------- 学生：个人专属主页 ----------
+  if (u.role === "student") {
+    const g = d.myGroup;
+    return renderLayout(`
+      <div class="hello-banner">
+        <div><h2>你好，${U.escapeHtml(u.name)}</h2><p>你的积分 <b style="font-size:20px">${d.myScore}</b> 分 · 班级排名 <b style="font-size:20px">第 ${d.myRank} 名</b></p></div>
+        <button class="btn" data-action="nav" data-page="shop">去积分商城</button>
+      </div>
+      <div class="grid grid-4" style="margin-bottom:16px">
+        <div class="stat-card"><div class="stat-icon blue">⭐</div><div class="stat-info"><div class="stat-label">我的积分</div><div class="stat-value">${d.myScore}</div></div></div>
+        <div class="stat-card"><div class="stat-icon green">🏅</div><div class="stat-info"><div class="stat-label">我的排名</div><div class="stat-value">第 ${d.myRank} 名</div></div></div>
+        <div class="stat-card"><div class="stat-icon orange">👥</div><div class="stat-info"><div class="stat-label">我的小组</div><div class="stat-value">${g ? U.escapeHtml(g.name) : "未分组"}</div></div></div>
+        <div class="stat-card"><div class="stat-icon red">📊</div><div class="stat-info"><div class="stat-label">小组排名</div><div class="stat-value">${g ? "第 " + g.groupRank + " 名" : "-"}</div></div></div>
+      </div>
+      <div class="card" style="margin-bottom:16px"><div class="card-title">我的小组概况 <button class="btn btn-sm btn-ghost" data-action="nav" data-page="rank">查看完整排行</button></div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;padding:4px 0">
+          <div>小组成员：<b>${g ? g.memberCount : 0}</b> 人</div>
+          <div>小组总分：<b>${g ? g.totalScore : 0}</b> 分</div>
+          <div>小组排名：<b>${g ? "第 " + g.groupRank + " 名" : "-"}</b></div>
+        </div></div>
+      ${_scoreTable("📒 我的积分记录", d.myScores, "还没有你的积分记录")}
+      ${_scoreTable("👥 小组成员记录", d.groupScores, "暂无记录")}
+      ${_scoreTable("🌐 其他成员记录", d.otherScores, "暂无记录")}
+    `);
+  }
+
+  // ---------- 老师 / 班主任：小组专属主页 ----------
+  const g = d.myGroup;
+  const heroBtn = u.role === "headTeacher"
+    ? `<button class="btn" data-action="nav" data-page="students">管理学生</button>`
+    : `<button class="btn" data-action="nav" data-page="scores">录入评分</button>`;
   return renderLayout(`
     <div class="hello-banner">
-      <div>
-        <h2>你好，${U.escapeHtml(u.name)}</h2>
-        <p>${helloSub}</p>
-      </div>
+      <div><h2>你好，${U.escapeHtml(u.name)}</h2><p>${u.role === "headTeacher" ? "班主任 · " : "导师 · "}负责 ${g ? U.escapeHtml(g.name) : "尚未分配小组"}，共 ${g ? g.memberCount : 0} 名学生</p></div>
       ${heroBtn}
     </div>
-    ${cards}
-    <div class="grid grid-2">
-      <div class="card">
-        <div class="card-title">🏆 积分榜前五 <button class="btn btn-sm btn-ghost" data-action="nav" data-page="rank">查看完整排行</button></div>
-        <div class="table-wrap"><table class="table">
-          <thead><tr><th>排名</th><th>姓名</th><th>总分</th></tr></thead>
-          <tbody>${topHtml || '<tr><td colspan="3" class="empty">暂无数据</td></tr>'}</tbody>
-        </table></div>
-      </div>
-      <div class="card">
-        <div class="card-title">📋 最新评分记录 <button class="btn btn-sm btn-ghost" data-action="nav" data-page="scorelog">查看全部</button></div>
-        <ul class="timeline">${recents || '<li class="empty">暂无评分记录</li>'}</ul>
-      </div>
-    </div>`);
+    <div class="grid grid-4" style="margin-bottom:16px">
+      <div class="stat-card"><div class="stat-icon blue">👥</div><div class="stat-info"><div class="stat-label">我的小组</div><div class="stat-value">${g ? U.escapeHtml(g.name) : "-"}</div></div></div>
+      <div class="stat-card"><div class="stat-icon green">🧑‍🤝‍🧑</div><div class="stat-info"><div class="stat-label">小组人数</div><div class="stat-value">${g ? g.memberCount : 0}</div></div></div>
+      <div class="stat-card"><div class="stat-icon orange">🏆</div><div class="stat-info"><div class="stat-label">小组总分</div><div class="stat-value">${g ? g.totalScore : 0}</div></div></div>
+      <div class="stat-card"><div class="stat-icon red">📊</div><div class="stat-info"><div class="stat-label">小组排名</div><div class="stat-value">${g ? "第 " + g.groupRank + " 名" : "-"}</div></div></div>
+    </div>
+    ${_scoreTable("👥 本组成员记录", d.groupScores, "暂无记录")}
+    ${_scoreTable("🌐 其他成员记录", d.otherScores, "暂无记录")}
+  `);
 }
 
 /* ===================== 学生管理 ===================== */
