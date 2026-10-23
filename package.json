@@ -1,0 +1,14 @@
+{
+  "name": "2401-quant-platform",
+  "version": "2.0.0",
+  "description": "2401班导师制量化管理系统 - 完整前后端平台版（零依赖 Node.js）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "license": "MIT"
+}
